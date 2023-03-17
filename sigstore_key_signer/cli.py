@@ -84,6 +84,12 @@ def _sign_key(args: argparse.Namespace) -> None:
     if not args.output_signature:
         sig = file.parent / f"{file.name}.sig"
 
+    if not args.overwrite:
+        if sig and sig.exists():
+            args._parser.error(
+                    f"Refusing to overwrite output signature file {sig} without --overwrite"
+            )
+
     output_map[file] = {
         "sig": sig,
     }
@@ -251,6 +257,12 @@ def _parser() -> argparse.ArgumentParser:
         help="Set an encryption password for the generated private key file",
     )
     sign.add_argument(
+        "--overwrite",
+        action="store_true",
+        default=False,
+        help="Overwrite preexisting signature and certificate outputs, if present",
+    )
+    sign.add_argument(
         "files",
         metavar="FILE",
         type=Path,
@@ -302,3 +314,7 @@ def main() -> None:
 
     except SigstoreKeySignerException as e:
         raise e
+
+
+if __name__ == "__main__":
+    main()
