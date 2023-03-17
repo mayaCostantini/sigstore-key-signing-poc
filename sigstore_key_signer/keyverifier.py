@@ -217,7 +217,6 @@ class KeyVerificationMaterials(VerificationMaterials):
             logger.debug("using offline rekor entry")
             entry = self._rekor_entry
         else:
-            # b64_public_key: B64Str = base64.b64encode(self.public_key)
             logger.debug("retrieving rekor entry")
 
             entry = client.log.entries.retrieve.post(
@@ -291,7 +290,7 @@ class KeyRefVerifier(BaseKeyVerifier):
 
     def __init__(self, rekor: KeyRekorClient) -> None:
         """Instanciate a new `KeyRefVerifier`."""
-        super().__init__(rekor)
+        super().__init__(rekor=rekor)
 
     def verify(self, materials: KeyVerificationMaterials) -> VerificationResult:
         """Verify a signature given a public key and a Rekor entry."""

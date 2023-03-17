@@ -26,8 +26,10 @@ from __future__ import annotations
 import argparse
 import base64
 import logging
+import os
 import sys
 
+from pathlib import Path
 from sigstore_key_signer import __version__
 from sigstore_key_signer.exceptions import (
     SigstoreKeySignerException,
@@ -40,10 +42,17 @@ from sigstore_key_signer.keysigner import (
 )
 from sigstore_key_signer.keyverifier import (
     BaseKeyVerifier,
+    KeyRekorClient,
     KeyRefVerifier,
     KeyVerificationMaterials,
 )
-from pathlib import Path
+from sigstore._internal.ctfe import CTKeyring
+from sigstore._internal.keyring import Keyring
+from sigstore._internal.rekor.client import (
+    DEFAULT_REKOR_URL,
+    RekorKeyring,
+)
+from sigstore._internal.tuf import TrustUpdater
 from sigstore.transparency import LogEntry
 from sigstore.verify.models import VerificationFailure
 from typing import TextIO
@@ -61,7 +70,10 @@ def _signer_from_opts(args: argparse.Namespace) -> BaseKeySigner:
         key_ref_signer = KeyRefSigner.production()
         key_ref_signer.key_file = args.key_file
         return key_ref_signer
-    new_key_signer = NewKeySigner.production()
+    if args.rekor_url == DEFAULT_REKOR_URL:
+        new_key_signer = NewKeySigner(rekor=args.rekor_url)
+    else:
+        new_key_signer = NewKeySigner.production()
     new_key_signer.key_file_prefix = args.key_file_prefix
     new_key_signer.encryption_password = args.password
 
@@ -70,7 +82,22 @@ def _signer_from_opts(args: argparse.Namespace) -> BaseKeySigner:
 
 def _verifier_from_opts(args: argparse.Namespace) -> BaseKeyVerifier:
     """Choose a Key Verifier from command line options."""
-    return KeyRefVerifier.production()
+    if args.rekor_url == DEFAULT_REKOR_URL:
+        return KeyRefVerifier.production()
+    else:
+        if args.rekor_root_pubkey is not None:
+            rekor_keys = [args.rekor_root_pubkey.read()]
+        else:
+            updater = TrustUpdater.production()
+            rekor_keys = updater.get_rekor_keys()
+        return KeyRefVerifier(
+            rekor=KeyRekorClient(
+                url=args.rekor_url,
+                rekor_keyring=RekorKeyring(Keyring(rekor_keys)),
+                # We don't use the CT keyring in verification so we can supply an empty keyring
+                ct_keyring=CTKeyring(Keyring()),
+            ),
+        )
 
 
 def _sign_key(args: argparse.Namespace) -> None:
@@ -86,7 +113,7 @@ def _sign_key(args: argparse.Namespace) -> None:
     if not args.overwrite:
         if sig and sig.exists():
             args._parser.error(
-                    f"Refusing to overwrite output signature file {sig} without --overwrite"
+                f"Refusing to overwrite output signature file {sig} without --overwrite"
             )
 
     output_map[file] = {
@@ -220,6 +247,21 @@ def _parser() -> argparse.ArgumentParser:
         action="count",
         default=0,
         help="Increase verbosity",
+    )
+    global_instance_options = parser.add_argument_group("Sigstore instance options")
+    global_instance_options.add_argument(
+        "--rekor-url",
+        metavar="URL",
+        type=str,
+        default=os.getenv("SIGSTORE_REKOR_URL", DEFAULT_REKOR_URL),
+        help="The Rekor instance to use",
+    )
+    global_instance_options.add_argument(
+        "--rekor-root-pubkey",
+        metavar="FILE",
+        type=argparse.FileType("rb"),
+        help="A PEM-encoded root public key for Rekor itself",
+        default=os.getenv("SIGSTORE_REKOR_ROOT_PUBKEY"),
     )
 
     subcommands = parser.add_subparsers(required=True, dest="subcommand")
