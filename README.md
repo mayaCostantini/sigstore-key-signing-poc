@@ -1,2 +1,2 @@
 # sigstore-key-signing-poc
-A PoC for key signing using sigstore-python
+A PoC for self-managed key signing using [sigstore-python](https://github.com/sigstore/sigstore-python).
