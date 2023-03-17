@@ -28,7 +28,6 @@ import base64
 import logging
 import sys
 
-from cryptography.hazmat.primitives import serialization
 from sigstore_key_signer import __version__
 from sigstore_key_signer.exceptions import (
     SigstoreKeySignerException,
