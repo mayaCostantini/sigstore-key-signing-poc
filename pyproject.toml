@@ -1,0 +1,68 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "sigstore-key-signer"
+version = "0.0.1"
+description = "A proof-of-concept to extend sigstore with self-managed key signing"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE.md"}
+keywords = ["sigstore", "security", "cryptography"]
+authors = [
+  {name = "Maya Costantini", email = "mcostant@redhat.com" }
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Topic :: Security",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+  "sigstore",
+  "pydantic",
+  "cryptography",
+  "requests"
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest"
+]
+lint = [
+    "black",
+    "mypy",
+    "types-requests"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/mayaCostantini/sigstore-key-signer-poc"
+"Bug Reports" = "https://github.com/mayaCostantini/sigstore-key-signer-poc/issues"
+"Source" = "https://github.com/mayaCostantini/sigstore-key-signer-poc"
+
+[project.scripts]
+sigstore-key-signer = "sigstore_key_signer.cli:main"
+
+[tool.mypy]
+allow_redefinition = true
+check_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+show_error_codes = true
+sqlite_cache = true
+strict_equality = true
+warn_no_return = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
+plugins = ["pydantic.mypy"]
