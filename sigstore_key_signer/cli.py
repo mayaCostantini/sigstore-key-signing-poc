@@ -64,6 +64,23 @@ logger = logging.getLogger(__name__)
 _DEFAULT_KEY_FILE_PREFIX = "sigstore"
 
 
+def _rekor_client_from_opts(args: argparse.Namespace) -> KeyRekorClient:
+    """Construct a KeyRekorClient from command line options."""
+    if args.rekor_url == DEFAULT_REKOR_URL:
+        if args.rekor_root_pubkey is not None:
+            rekor_keys = [args.rekor_root_pubkey.read()]
+        else:
+            updater = TrustUpdater.production()
+            rekor_keys = updater.get_rekor_keys()
+
+    return KeyRekorClient(
+        url=args.rekor_url,
+        rekor_keyring=RekorKeyring(Keyring(rekor_keys)),
+        # We don't use the CT keyring in verification so we can supply an empty keyring
+        ct_keyring=CTKeyring(Keyring()),
+    )
+
+
 def _signer_from_opts(args: argparse.Namespace) -> BaseKeySigner:
     """Choose a Key Signer from command line options."""
     if args.key:
@@ -71,7 +88,7 @@ def _signer_from_opts(args: argparse.Namespace) -> BaseKeySigner:
         key_ref_signer.key_file = args.key_file
         return key_ref_signer
     if args.rekor_url == DEFAULT_REKOR_URL:
-        new_key_signer = NewKeySigner(rekor=args.rekor_url)
+        new_key_signer = NewKeySigner(rekor=_rekor_client_from_opts(args))
     else:
         new_key_signer = NewKeySigner.production()
     new_key_signer.key_file_prefix = args.key_file_prefix
@@ -85,19 +102,7 @@ def _verifier_from_opts(args: argparse.Namespace) -> BaseKeyVerifier:
     if args.rekor_url == DEFAULT_REKOR_URL:
         return KeyRefVerifier.production()
     else:
-        if args.rekor_root_pubkey is not None:
-            rekor_keys = [args.rekor_root_pubkey.read()]
-        else:
-            updater = TrustUpdater.production()
-            rekor_keys = updater.get_rekor_keys()
-        return KeyRefVerifier(
-            rekor=KeyRekorClient(
-                url=args.rekor_url,
-                rekor_keyring=RekorKeyring(Keyring(rekor_keys)),
-                # We don't use the CT keyring in verification so we can supply an empty keyring
-                ct_keyring=CTKeyring(Keyring()),
-            ),
-        )
+        return KeyRefVerifier(rekor=_rekor_client_from_opts(args))
 
 
 def _sign_key(args: argparse.Namespace) -> None:
