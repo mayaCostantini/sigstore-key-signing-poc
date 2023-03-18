@@ -27,7 +27,6 @@ import base64
 import getpass
 import logging
 
-from cryptography import x509
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -118,7 +117,7 @@ class NewKeySigner(BaseKeySigner):
     def sign(self, input_: IO[bytes]) -> KeySigningResult:
         """Generate a new key pair and sign artifact."""
         input_digest = sha256_streaming(input_)
-        logger.debug("Generating ephemeral keys...")
+        logger.debug("Generating a key pair...")
         private_key = ec.generate_private_key(ec.SECP384R1())
 
         artifact_signature = private_key.sign(
@@ -128,7 +127,7 @@ class NewKeySigner(BaseKeySigner):
         if self.encryption_password:
             # Prompt for encryption password
             password = getpass.getpass(
-                "Enter an encyrption password for the private key:\n"
+                "Enter an encryption password for the private key:\n"
             ).encode()
 
         with open(f"{self.key_file_prefix}.key", "wb") as privkey_file:

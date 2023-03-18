@@ -35,6 +35,7 @@ from sigstore_key_signer.exceptions import (
     SigstoreKeySignerException,
     VerificationError,
 )
+from sigstore_key_signer.generate import generate_key_pair
 from sigstore_key_signer.keysigner import (
     BaseKeySigner,
     KeyRefSigner,
@@ -232,6 +233,21 @@ def _verify_key(args: argparse.Namespace) -> None:
             print(f"Verified signature for {file.name}: OK.")
 
 
+def _generate_key_pair(args: argparse.Namespace) -> None:
+    """Generate a new key pair."""
+    privpath = Path(args.path) / f"{args.output_key_prefix}.pub"
+    pubpath = Path(args.path) / f"{args.output_key_prefix}.key"
+    if (privpath.is_file() or pubpath.is_file()) and not args.overwrite:
+        args._parser.error(
+            f"Refusing to overwrite output key files {args.output_key_prefix}.* without --overwrite"
+        )
+    generate_key_pair(
+        prefix=args.output_key_prefix,
+        path=args.path,
+        no_password=args.no_password,
+    )
+
+
 def _parser() -> argparse.ArgumentParser:
     """
     Main parser for sigstore-key-signer.
@@ -306,7 +322,7 @@ def _parser() -> argparse.ArgumentParser:
         "--overwrite",
         action="store_true",
         default=False,
-        help="Overwrite preexisting signature and certificate outputs, if present",
+        help="Overwrite preexisting signature if present",
     )
     sign.add_argument(
         "files",
@@ -341,6 +357,38 @@ def _parser() -> argparse.ArgumentParser:
         help="The files to verify",
     )
 
+    generate_key_pair = subcommands.add_parser(
+        "generate-key-pair", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    generate_key_pair.add_argument(
+        "-p",
+        "--path",
+        metavar="PATH",
+        type=Path,
+        default=Path("."),
+        help="Path for generating a key pair",
+    )
+    generate_key_pair.add_argument(
+        "-o",
+        "--output-key-prefix",
+        metavar="mykey",
+        default="sigstore",
+        help="Prefix for the generated key files",
+    )
+    generate_key_pair.add_argument(
+        "-W",
+        "--no-password",
+        action="store_false",
+        default=False,
+        help="Do not prompt for a private key encryption password",
+    )
+    generate_key_pair.add_argument(
+        "--overwrite",
+        action="store_true",
+        default=False,
+        help="Overwrite preexisting key files if present",
+    )
+
     return parser
 
 
@@ -357,6 +405,9 @@ def main() -> None:
 
         elif args.subcommand == "verify-key":
             _verify_key(args)
+
+        elif args.subcommand == "generate-key-pair":
+            _generate_key_pair(args)
 
     except SigstoreKeySignerException as e:
         raise e
