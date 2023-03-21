@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-"""Base class for implementing secret manager adapters."""
+"""Base class for implementing KMS adapters."""
 
 import abc
 
@@ -26,7 +26,13 @@ class BaseAdapter(abc.ABC):
     """Parent class for secrets manager adapters."""
 
     def __init__(self, *args, **kwargs) -> None:
-        """Initialize a secrets manager."""
+        """Initialize a KMS adapter."""
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def uri_scheme(self) -> str:
+        """The go-cloud-style URI scheme for the KMS provider."""
         raise NotImplementedError
 
     @abc.abstractmethod
