@@ -19,3 +19,5 @@
 __name__ = "sigstore-key-signer"
 __version__ = "0.0.1"
 __author__ = "Maya Costantini <mcostant@redhat.com>"
+
+DEFAULT_KEY_FILE_PREFIX = "sigstore"
