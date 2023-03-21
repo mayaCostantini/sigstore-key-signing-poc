@@ -24,9 +24,11 @@ and a `hvac.Client` attribute stored as `Vault.client` for more flexibility.
 import hvac
 import logging
 import os
+import re
 
+from requests import Response
 from sigstore_key_signer.adapters.base import BaseAdapter
-from typing import Any, Optional
+from typing import Any
 
 
 logger = logging.getLogger(__name__)
@@ -51,17 +53,10 @@ VAULT_ENV = {
 }
 
 
-_AUTH_METHODS = (
-    "tls",
-    "tls_client_side_cert",
-    "http",
-)
-
-
 class Vault(BaseAdapter):
     """Vault adapter for storing and retrieving keys."""
 
-    def __init__(self, auth_method: str) -> None:
+    def __init__(self) -> None:
         """Initialize a `Vault` client and warn for missing environment variables."""
         missing_vars = set(VAULT_ENV).difference(os.environ.keys())
         if missing_vars:
@@ -69,39 +64,17 @@ class Vault(BaseAdapter):
                 f"Vault environment variables missing: {missing_vars}\n"
                 "Could not initialize corresponding attributes."
             )
+        
+        self.check_scheme()
+        self.client = hvac.Client(
+            url=self.uri
+        )
 
-        if auth_method not in _AUTH_METHODS:
-            raise ValueError(
-                f"Unknow authentication method {auth_method}. Valid values are: {_AUTH_METHODS}"
-            )
-        self.auth_method = auth_method
-
-        if self.auth_method == "tls":
-            self.client = hvac.Client(
-                url=self.url,
-            )
-
-        elif auth_method == "tls_client_side_cert":
-            self.client = hvac.Client(
-                url=self.url,
-                token=self.token,
-                cert=(self.client_cert, self.client_key),
-                verify=self.ca_path,
-            )
-
-        elif auth_method == "http":
-            logger.warn("Insecure Vault authentication method: `http`")
-            self.client = hvac.Client(
-                url=self.url,
-            )
-
-    @staticmethod
-    def check_scheme(url: str, expected: str) -> None:
+    def check_scheme(self) -> None:
         """Check that the URL scheme is the one expected."""
-        scheme = url.split("://")[0]
-        if scheme != expected:
+        if re.match(re.compile(self.uri_scheme), self.uri) is None:
             raise ValueError(
-                f"Incorrect scheme specified for Vault URL: {scheme}: expected `https`"
+                f"Incorrect scheme specified for Vault URL: {self.uri}: expected expression matching {self.uri_scheme}"
             )
         return
 
@@ -114,50 +87,22 @@ class Vault(BaseAdapter):
                 raise
         return getattr(self, attr)
 
-    def store(
-        self,
-        path: str,
-        secret: dict,
-        cas: Optional[int],
-        mount_point: str = "secret",
-    ) -> bool:
-        """Store or uptade a signing key on the server."""
-        return self.client.secrets.kv.v2.create_or_update_secret(
-            path=path,
-            cas=cas,
-            secret=secret,
-            mount_point=mount_point,
-        )
+    def store(self, key_name: str) -> Response:
+        """Store a key on the server at the default path `/transit/keys/{key_name}`"""
+        return self.client.secrets.transit.create_key(name=key_name)
 
-    def retrieve(
-        self,
-        path: str,
-        version: Optional[int],
-        raise_on_deleted_version: Optional[bool],
-        mount_point: Optional[str] = "secret",
-    ) -> str:
-        """Retrieve the signing key at the specified location, with the specified version."""
-        resp = self.client.secrets.kv.read_secret_version(
-            path=path,
-            version=version,
-            raise_on_deleted_version=raise_on_deleted_version,
-            mount_point=mount_point,
-        )
+    def retrieve(self, key_name: str) -> dict:
+        """Retrieve the key at the default path `/transit/keys/{key_name}`."""
+        return self.client.secrets.transit.read_key(name=key_name)
 
-        return resp["data"]["data"]["password"]
+    def delete(self, key_name: str) -> bool:
+        """Delete a stored key at the default path `/transit/keys/{key_name}`."""
+        return self.client.secrets.transit.delete_key(name=key_name)
 
-    def delete(
-        self,
-        path: str,
-        versions: int,
-        mount_point: Optional[str] = "secret",
-    ) -> bool:
-        """Delete a stored signing key."""
-        return self.client.secrets.kv.v2.delete_secret_versions(
-            path=path,
-            versions=versions,
-            mount_point=mount_point,
-        )
+    @property
+    def uri_scheme(self) -> str:
+        """Go-cloud-style URI scheme for the Vault server."""
+        return r"^hashivault://(\w(([\w\-.]+)?\w)?)$"
 
     @property
     def token(self) -> str:
@@ -165,9 +110,9 @@ class Vault(BaseAdapter):
         return self._get_or_set_from_env("token", "VAULT_TOKEN")
 
     @property
-    def url(self) -> str:
-        """Vault server URL."""
-        return self._get_or_set_from_env("url", "VAULT_ADDR")
+    def uri(self) -> str:
+        """Vault server URI."""
+        return self._get_or_set_from_env("uri", "VAULT_ADDR")
 
     @property
     def ca_cert(self) -> str:
