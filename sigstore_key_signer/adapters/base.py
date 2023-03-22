@@ -36,7 +36,7 @@ class BaseAdapter(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def store(self, *args, **kwargs) -> bool:
+    def store(self, *args, **kwargs) -> Any:
         """Store a key."""
         raise NotImplementedError
 
@@ -46,6 +46,11 @@ class BaseAdapter(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def delete(self, *args, **kwargs) -> bool:
+    def delete(self, *args, **kwargs) -> Any:
         """Delete a key."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def sign(self, *args, **kwargs) -> Any:
+        """Sign using a private key stored by the KMS."""
         raise NotImplementedError

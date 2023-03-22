@@ -64,11 +64,9 @@ class Vault(BaseAdapter):
                 f"Vault environment variables missing: {missing_vars}\n"
                 "Could not initialize corresponding attributes."
             )
-        
+
         self.check_scheme()
-        self.client = hvac.Client(
-            url=self.uri
-        )
+        self.client = hvac.Client(url=self.uri)
 
     def check_scheme(self) -> None:
         """Check that the URL scheme is the one expected."""
@@ -89,15 +87,33 @@ class Vault(BaseAdapter):
 
     def store(self, key_name: str) -> Response:
         """Store a key on the server at the default path `/transit/keys/{key_name}`"""
-        return self.client.secrets.transit.create_key(name=key_name)
+        return self.client.secrets.transit.create_key(key_name)
 
     def retrieve(self, key_name: str) -> dict:
-        """Retrieve the key at the default path `/transit/keys/{key_name}`."""
-        return self.client.secrets.transit.read_key(name=key_name)
+        """Retrieve the public key at the default path `/transit/keys/{key_name}`."""
+        resp = self.client.secrets.transit.read_key(key_name)
+        # Take the key at the first index
+        return resp["data"]["keys"]["1"]["public_key"]
 
     def delete(self, key_name: str) -> bool:
         """Delete a stored key at the default path `/transit/keys/{key_name}`."""
-        return self.client.secrets.transit.delete_key(name=key_name)
+        return self.client.secrets.transit.delete_key(key_name)
+
+    def sign(
+        self,
+        key_name: str,
+        hash_input: str,
+    ) -> bytes:
+        """Sign an artifact using the private key stored under `key_name`."""
+        # Assuming ecdsa-p256 key type 
+        resp = self.client.secrets.transit.sign_data(
+            key_name,
+            hash_input,
+            prehashed=True,
+        )
+        sig = resp["data"]["signature"]
+
+        return sig.split(":")[-1].encode()
 
     @property
     def uri_scheme(self) -> str:
