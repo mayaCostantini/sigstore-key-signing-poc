@@ -130,7 +130,7 @@ class KeyRefSigner(BaseKeySigner):
             with open(self.key_path, "rb") as file:
                 signing_key = file.read()
 
-                decrypted_key: ec.EllipticCurvePrivateKey = serialization.load_pem_private_key( # type: ignore
+                decrypted_key: ec.EllipticCurvePrivateKey = serialization.load_pem_private_key(  # type: ignore
                     data=signing_key,
                     password=self.encryption_password,
                 )
@@ -143,7 +143,9 @@ class KeyRefSigner(BaseKeySigner):
                     format=serialization.PublicFormat.SubjectPublicKeyInfo,
                 )
 
-                b64_artifact_signature = B64Str(base64.b64encode(artifact_signature).decode())
+                b64_artifact_signature = B64Str(
+                    base64.b64encode(artifact_signature).decode()
+                )
                 b64_public_key = B64Str(base64.b64encode(public_key).decode())
 
         else:

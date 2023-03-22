@@ -30,7 +30,10 @@ import os
 import sys
 
 from pathlib import Path
-from sigstore_key_signer import __version__
+from sigstore_key_signer import (
+    DEFAULT_KEY_FILE_PREFIX,
+    __version__,
+)
 from sigstore_key_signer.exceptions import (
     SigstoreKeySignerException,
     VerificationError,
@@ -61,8 +64,6 @@ from typing import TextIO
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
-
-_DEFAULT_KEY_FILE_PREFIX = "sigstore"
 
 
 def _rekor_client_from_opts(args: argparse.Namespace) -> KeyRekorClient:
@@ -164,7 +165,7 @@ def _collect_verification_materials(
             sig = file.parent / f"{file.name}.sig"
 
         if args.public_key is None:
-            pubkey = file.parent / f"{_DEFAULT_KEY_FILE_PREFIX}.pub"
+            pubkey = file.parent / f"{DEFAULT_KEY_FILE_PREFIX}.pub"
 
         missing = []
         if args.signature or args.public_key:
@@ -308,7 +309,7 @@ def _parser() -> argparse.ArgumentParser:
         "--key-file-prefix",
         metavar="NAME",
         type=str,
-        default=_DEFAULT_KEY_FILE_PREFIX,
+        default=DEFAULT_KEY_FILE_PREFIX,
         help="Prefix name for new key files",
     )
     sign.add_argument(

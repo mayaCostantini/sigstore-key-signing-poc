@@ -105,7 +105,7 @@ class Vault(BaseAdapter):
         hash_input: str,
     ) -> bytes:
         """Sign an artifact using the private key stored under `key_name`."""
-        # Assuming ecdsa-p256 key type 
+        # Assuming ecdsa-p256 key type
         resp = self.client.secrets.transit.sign_data(
             key_name,
             hash_input,
