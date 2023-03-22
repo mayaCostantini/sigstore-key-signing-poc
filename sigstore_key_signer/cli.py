@@ -86,11 +86,15 @@ def _rekor_client_from_opts(args: argparse.Namespace) -> KeyRekorClient:
 def _signer_from_opts(args: argparse.Namespace) -> BaseKeySigner:
     """Choose a Key Signer from command line options."""
     if args.key:
-        key_ref_signer = KeyRefSigner.production()
-        key_ref_signer.key_file = args.key_file
+        key_ref_signer = KeyRefSigner.production(
+            key_path=args.key, encryption_password=args.password
+        )
+        key_ref_signer.key_path = args.key
         return key_ref_signer
     if args.rekor_url == DEFAULT_REKOR_URL:
-        new_key_signer = NewKeySigner(rekor=_rekor_client_from_opts(args))
+        new_key_signer = NewKeySigner(
+            _rekor_client_from_opts(args), args.key, encryption_password=args.password
+        )
     else:
         new_key_signer = NewKeySigner.production()
     new_key_signer.key_file_prefix = args.key_file_prefix
@@ -315,8 +319,7 @@ def _parser() -> argparse.ArgumentParser:
     sign.add_argument(
         "-w",
         "--password",
-        action="store_true",
-        default=True,
+        metavar="PASSWORD",
         help="Set an encryption password for the generated private key file",
     )
     sign.add_argument(

@@ -24,12 +24,12 @@ from __future__ import annotations
 
 import abc
 import base64
-import getpass
 import logging
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
+from pathlib import Path
 from pydantic import BaseModel
 from sigstore._internal.rekor import RekorClient
 from sigstore._internal.tuf import TrustUpdater
@@ -79,13 +79,13 @@ class BaseKeySigner(abc.ABC):
         self._rekor = rekor
 
     @classmethod
-    def production(cls: Type[T]) -> T:
+    def production(cls: Type[T], **kwargs) -> T:
         """
         Return a key signer instance configured against Sigstore's production-level services.
         """
         updater = TrustUpdater.production()
         rekor = RekorClient.production(updater)
-        return cls(rekor=rekor)
+        return cls(rekor=rekor, **kwargs)
 
     @abc.abstractmethod
     def sign(self, input_: IO[bytes]) -> KeySigningResult:
@@ -99,7 +99,7 @@ class KeyRefSigner(BaseKeySigner):
     def __init__(
         self,
         rekor: RekorClient,
-        key_path: str,
+        key_path: Path,
         encryption_password: Optional[bytes],
     ) -> None:
         """Initialize a KeyRefSigner instance."""
@@ -109,7 +109,7 @@ class KeyRefSigner(BaseKeySigner):
 
     def _get_scheme(self) -> str:
         """Get the `key_path` URI or local path scheme."""
-        return urlparse(self.key_path).scheme
+        return urlparse(self.key_path.as_posix()).scheme
 
     def _kms_adapter_from_scheme(self, scheme: str) -> BaseAdapter:
         """Retrieve a KMS adapter from provided scheme."""
@@ -150,7 +150,7 @@ class KeyRefSigner(BaseKeySigner):
 
         else:
             kms_client = self._kms_adapter_from_scheme(self._get_scheme())
-            privkey_name = self.key_path.split("://")[-1]
+            privkey_name = self.key_path.as_posix().split("://")[-1]
             if isinstance(kms_client, Vault):
                 artifact_signature = kms_client.sign(
                     privkey_name,
@@ -185,8 +185,8 @@ class NewKeySigner(BaseKeySigner):
     def __init__(
         self,
         rekor: RekorClient,
-        key_file_prefix: Optional[str],
-        encryption_password: Optional[bool] = True,
+        key_file_prefix: str,
+        encryption_password: Optional[bytes],
     ) -> None:
         """Initialize a NewKeySigner instance."""
         super().__init__(rekor=rekor)
@@ -203,20 +203,22 @@ class NewKeySigner(BaseKeySigner):
             input_digest, ec.ECDSA(Prehashed(hashes.SHA256()))
         )
 
+        encryption_algorithm: serialization.KeySerializationEncryption
+
         if self.encryption_password:
-            # Prompt for encryption password
-            password = getpass.getpass(
-                "Enter an encryption password for the private key:\n"
-            ).encode()
+            encryption_algorithm = serialization.BestAvailableEncryption(
+                self.encryption_password
+            )
+
+        else:
+            encryption_algorithm = serialization.NoEncryption()
 
         with open(f"{self.key_file_prefix}.key", "wb") as privkey_file:
             privkey_file.write(
                 private_key.private_bytes(
                     encoding=serialization.Encoding.PEM,
                     format=serialization.PrivateFormat.PKCS8,
-                    encryption_algorithm=serialization.BestAvailableEncryption(
-                        password
-                    ),
+                    encryption_algorithm=encryption_algorithm,
                 )
             )
 
