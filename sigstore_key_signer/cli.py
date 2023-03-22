@@ -30,7 +30,10 @@ import os
 import sys
 
 from pathlib import Path
-from sigstore_key_signer import __version__
+from sigstore_key_signer import (
+    DEFAULT_KEY_FILE_PREFIX,
+    __version__,
+)
 from sigstore_key_signer.exceptions import (
     SigstoreKeySignerException,
     VerificationError,
@@ -62,8 +65,6 @@ from typing import TextIO
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 
-_DEFAULT_KEY_FILE_PREFIX = "sigstore"
-
 
 def _rekor_client_from_opts(args: argparse.Namespace) -> KeyRekorClient:
     """Construct a KeyRekorClient from command line options."""
@@ -85,11 +86,15 @@ def _rekor_client_from_opts(args: argparse.Namespace) -> KeyRekorClient:
 def _signer_from_opts(args: argparse.Namespace) -> BaseKeySigner:
     """Choose a Key Signer from command line options."""
     if args.key:
-        key_ref_signer = KeyRefSigner.production()
-        key_ref_signer.key_file = args.key_file
+        key_ref_signer = KeyRefSigner.production(
+            key_path=args.key, encryption_password=args.password
+        )
+        key_ref_signer.key_path = args.key
         return key_ref_signer
     if args.rekor_url == DEFAULT_REKOR_URL:
-        new_key_signer = NewKeySigner(rekor=_rekor_client_from_opts(args))
+        new_key_signer = NewKeySigner(
+            _rekor_client_from_opts(args), args.key, encryption_password=args.password
+        )
     else:
         new_key_signer = NewKeySigner.production()
     new_key_signer.key_file_prefix = args.key_file_prefix
@@ -164,7 +169,7 @@ def _collect_verification_materials(
             sig = file.parent / f"{file.name}.sig"
 
         if args.public_key is None:
-            pubkey = file.parent / f"{_DEFAULT_KEY_FILE_PREFIX}.pub"
+            pubkey = file.parent / f"{DEFAULT_KEY_FILE_PREFIX}.pub"
 
         missing = []
         if args.signature or args.public_key:
@@ -308,14 +313,13 @@ def _parser() -> argparse.ArgumentParser:
         "--key-file-prefix",
         metavar="NAME",
         type=str,
-        default=_DEFAULT_KEY_FILE_PREFIX,
+        default=DEFAULT_KEY_FILE_PREFIX,
         help="Prefix name for new key files",
     )
     sign.add_argument(
         "-w",
         "--password",
-        action="store_true",
-        default=True,
+        metavar="PASSWORD",
         help="Set an encryption password for the generated private key file",
     )
     sign.add_argument(

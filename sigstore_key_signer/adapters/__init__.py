@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright(C) 2023 Maya Costantini
+# sigstore-key-signer
 #
 # This program is free software: you can redistribute it and / or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,10 +15,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
-"""A PoC for signing artifacts with Sigstore using a self-managed key pair"""
+"""Adapters for interacting with secret managers and KMS."""
 
-__name__ = "sigstore-key-signer"
-__version__ = "0.0.1"
-__author__ = "Maya Costantini <mcostant@redhat.com>"
+from .base import BaseAdapter
+from .vault import Vault, VAULT_ENV
 
-DEFAULT_KEY_FILE_PREFIX = "sigstore"
+__all__ = [
+    "BaseAdapter",
+    "Vault",
+    "VAULT_ENV",
+]
