@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import getpass
 import logging
 import os
 import sys
@@ -59,11 +60,13 @@ from sigstore._internal.rekor.client import (
 from sigstore._internal.tuf import TrustUpdater
 from sigstore.transparency import LogEntry
 from sigstore.verify.models import VerificationFailure
-from typing import TextIO
+from typing import Optional, TextIO
 
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
+
+DEFAULT_MIN_PASSWORD_LENGTH = 1
 
 
 def _rekor_client_from_opts(args: argparse.Namespace) -> KeyRekorClient:
@@ -85,20 +88,22 @@ def _rekor_client_from_opts(args: argparse.Namespace) -> KeyRekorClient:
 
 def _signer_from_opts(args: argparse.Namespace) -> BaseKeySigner:
     """Choose a Key Signer from command line options."""
+    password = _get_privkey_password(args)
+
     if args.key:
         key_ref_signer = KeyRefSigner.production(
-            key_path=args.key, encryption_password=args.password
+            key_path=args.key, encryption_password=password
         )
         key_ref_signer.key_path = args.key
         return key_ref_signer
     if args.rekor_url == DEFAULT_REKOR_URL:
         new_key_signer = NewKeySigner(
-            _rekor_client_from_opts(args), args.key, encryption_password=args.password
+            _rekor_client_from_opts(args), args.key, encryption_password=password
         )
     else:
         new_key_signer = NewKeySigner.production()
     new_key_signer.key_file_prefix = args.key_file_prefix
-    new_key_signer.encryption_password = args.password
+    new_key_signer.encryption_password = password
 
     return new_key_signer
 
@@ -238,18 +243,48 @@ def _verify_key(args: argparse.Namespace) -> None:
             print(f"Verified signature for {file.name}: OK.")
 
 
+def _get_privkey_password(args: argparse.Namespace) -> Optional[bytes]:
+    """Get a private key encryption password from command-line options."""
+    password = None
+
+    if args.password and args.password_stdin:
+        args._parser.error(
+            "Cannot provide arguments '--password' and '--password-stdin' at the same time"
+        )
+    if args.password:
+        password = args.password.encode()
+    elif args.password_stdin:
+        password = getpass.getpass(
+            "Enter an encryption password for the private key:\n"
+        )
+        if len(password) == 0:
+            args._parser.error(
+                f"Input password must be at least {DEFAULT_MIN_PASSWORD_LENGTH} bytes"
+            )
+        else:
+            password = password.encode()
+    elif not args.password and not args.password_stdin:
+        logger.warn("No private key encryption password provided for the private key")
+
+    return password
+
+
 def _generate_key_pair(args: argparse.Namespace) -> None:
     """Generate a new key pair."""
     privpath = Path(args.path) / f"{args.output_key_prefix}.pub"
     pubpath = Path(args.path) / f"{args.output_key_prefix}.key"
+
+    password = _get_privkey_password(args)
+
     if (privpath.is_file() or pubpath.is_file()) and not args.overwrite:
         args._parser.error(
             f"Refusing to overwrite output key files {args.output_key_prefix}.* without --overwrite"
         )
+
     generate_key_pair(
         prefix=args.output_key_prefix,
         path=args.path,
-        no_password=args.no_password,
+        password=password,
     )
 
 
@@ -317,10 +352,16 @@ def _parser() -> argparse.ArgumentParser:
         help="Prefix name for new key files",
     )
     sign.add_argument(
-        "-w",
+        "-W",
         "--password",
         metavar="PASSWORD",
-        help="Set an encryption password for the generated private key file",
+        help="Provide an encryption password for the private key",
+    )
+    sign.add_argument(
+        "--password-stdin",
+        action="store_true",
+        default=False,
+        help="Take the private key encryption password from stdin",
     )
     sign.add_argument(
         "--overwrite",
@@ -381,10 +422,15 @@ def _parser() -> argparse.ArgumentParser:
     )
     generate_key_pair.add_argument(
         "-W",
-        "--no-password",
-        action="store_false",
+        "--password",
+        metavar="PASSWORD",
+        help="Provide an encryption password for the private key",
+    )
+    generate_key_pair.add_argument(
+        "--password-stdin",
+        action="store_true",
         default=False,
-        help="Do not prompt for a private key encryption password",
+        help="Take the private key encryption password from stdin",
     )
     generate_key_pair.add_argument(
         "--overwrite",

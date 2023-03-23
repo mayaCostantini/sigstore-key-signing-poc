@@ -17,12 +17,12 @@
 
 """Generate a new key pair."""
 
-import getpass
 import logging
 import os
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from typing import Optional
 
 
 logger = logging.getLogger(__name__)
@@ -32,19 +32,15 @@ logger = logging.getLogger(__name__)
 def generate_key_pair(
     prefix: str,
     path: str,
-    no_password: bool,
+    password: Optional[bytes],
 ) -> tuple[bytes, bytes]:
     """Generate a new key pair."""
     logger.debug("Generating a key pair...")
     private_key = ec.generate_private_key(ec.SECP384R1())
     encryption: serialization.KeySerializationEncryption
 
-    if not no_password:
-        # Prompt for encryption password
-        passwd = getpass.getpass(
-            "Enter an encryption password for the private key:\n"
-        ).encode()
-        encryption = serialization.BestAvailableEncryption(passwd)
+    if password:
+        encryption = serialization.BestAvailableEncryption(password)
     else:
         encryption = serialization.NoEncryption()
 
