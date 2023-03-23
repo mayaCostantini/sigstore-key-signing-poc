@@ -42,7 +42,7 @@ Transparency log entry created at index: 16110633
 Signature written to file.txt.sig
 ```
 
-- Sign using an existing private key:
+- Signing using an existing private key:
 
 ```
 sigstore-key-signer sign-key --key sigstore.key --password my-private-key-password file.txt
