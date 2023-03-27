@@ -62,7 +62,6 @@ class Vault(BaseAdapter):
         if missing_vars:
             logger.warn(
                 f"Vault environment variables missing: {missing_vars}\n"
-                "Could not initialize corresponding attributes."
             )
 
         self.check_scheme()
