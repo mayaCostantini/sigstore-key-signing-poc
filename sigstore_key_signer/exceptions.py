@@ -36,3 +36,7 @@ class SlotNotSetException(SigstoreKeySignerException):
 
 class SlotNotFoundException(SigstoreKeySignerException):
     """Exception raised when no slot could be identified on a device by a SecurityKeySigner."""
+
+
+class KMSProviderError(SigstoreKeySignerException):
+    """Error raised when failing to communicate with a KMS provider."""
