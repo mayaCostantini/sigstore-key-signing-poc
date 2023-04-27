@@ -39,7 +39,10 @@ from sigstore_key_signer.exceptions import (
     SigstoreKeySignerException,
     VerificationError,
 )
-from sigstore_key_signer.generate import generate_key_pair
+from sigstore_key_signer.generate import (
+    generate_local_key_pair,
+    generate_to_kms,
+)
 from sigstore_key_signer.keysigner import (
     BaseKeySigner,
     KeyRefSigner,
@@ -61,12 +64,27 @@ from sigstore._internal.tuf import TrustUpdater
 from sigstore.transparency import LogEntry
 from sigstore.verify.models import VerificationFailure
 from typing import Optional, TextIO
+from urllib.parse import (
+    urljoin,
+    urlparse,
+)
 
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 DEFAULT_MIN_PASSWORD_LENGTH = 1
+
+
+def _parse_kms_uri(uri: str) -> tuple[str, str]:
+    """Parse and validate a KMS URI."""
+    try:
+        parsed_uri = urlparse(uri)
+        scheme, full_path = parsed_uri.scheme, uri.split("://")[1]
+    except Exception as e:
+        raise e
+
+    return scheme, full_path
 
 
 def _rekor_client_from_opts(args: argparse.Namespace) -> KeyRekorClient:
@@ -271,21 +289,26 @@ def _get_privkey_password(args: argparse.Namespace) -> Optional[bytes]:
 
 def _generate_key_pair(args: argparse.Namespace) -> None:
     """Generate a new key pair."""
-    privpath = Path(args.path) / f"{args.output_key_prefix}.pub"
-    pubpath = Path(args.path) / f"{args.output_key_prefix}.key"
+    if args.kms:
+        scheme, full_path = _parse_kms_uri(args.kms)
+        generate_to_kms(args.output_key_prefix, args.path, scheme)
 
-    password = _get_privkey_password(args)
+    else:
+        privpath = Path(args.path) / f"{args.output_key_prefix}.pub"
+        pubpath = Path(args.path) / f"{args.output_key_prefix}.key"
 
-    if (privpath.is_file() or pubpath.is_file()) and not args.overwrite:
-        args._parser.error(
-            f"Refusing to overwrite output key files {args.output_key_prefix}.* without --overwrite"
-        )
+        password = _get_privkey_password(args)
 
-    generate_key_pair(
-        prefix=args.output_key_prefix,
-        path=args.path,
-        password=password,
-    )
+        if (privpath.is_file() or pubpath.is_file()) and not args.overwrite:
+            args._parser.error(
+                f"Refusing to overwrite output key files {args.output_key_prefix}.* without --overwrite"
+            )
+
+            generate_local_key_pair(
+                prefix=args.output_key_prefix,
+                path=args.path,
+                password=password,
+            )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -437,6 +460,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
         help="Overwrite preexisting key files if present",
+    )
+    generate_key_pair.add_argument(
+        "--kms",
+        metavar="[SCHEME]://[KEYPATH]",
+        help="Generate a key pair in a KMS provider",
     )
 
     return parser

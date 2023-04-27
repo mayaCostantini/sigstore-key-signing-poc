@@ -19,19 +19,26 @@
 
 import logging
 import os
+import requests
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from typing import Optional
 
+from sigstore_key_signer.adapters import Vault
+from sigstore_key_signer.exceptions import KMSProviderError
+
 
 logger = logging.getLogger(__name__)
+
+KMS_PROVIDERS_MAP = {
+    "hashivault": Vault,
+}
 
 
 # TODO: dedupe this logic with the one for `NewKeySigner`
 def generate_key_pair(
     prefix: str,
-    path: str,
     password: Optional[bytes],
 ) -> tuple[bytes, bytes]:
     """Generate a new key pair."""
@@ -50,15 +57,57 @@ def generate_key_pair(
         encryption_algorithm=encryption,
     )
 
-    with open(os.path.join(path, f"{prefix}.key"), "wb") as privkey_file:
-        privkey_file.write(private_key_bytes)
-
-    public_key = private_key.public_key().public_bytes(
+    public_key_bytes = private_key.public_key().public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
     )
 
-    with open(os.path.join(path, f"{prefix}.pub"), "wb") as pubkey_file:
-        pubkey_file.write(public_key)
+    return (private_key_bytes, public_key_bytes)
 
-    return (private_key_bytes, public_key)
+
+def generate_local_key_pair(
+    prefix: str,
+    path: str,
+    password: Optional[bytes],
+) -> tuple[bytes, bytes]:
+    """Generate a new key pair locally."""
+    privkey_bytes, pubkey_bytes = generate_key_pair(prefix=prefix, password=password)
+
+    with open(os.path.join(path, f"{prefix}.key"), "wb") as privkey_file:
+        privkey_file.write(privkey_bytes)
+
+    with open(os.path.join(path, f"{prefix}.pub"), "wb") as pubkey_file:
+        pubkey_file.write(pubkey_bytes)
+
+    return privkey_bytes, pubkey_bytes
+
+
+def generate_to_kms(
+    prefix: str,
+    path: str,
+    kms_scheme: str,
+) -> bytes:
+    """Generate a new key pair and store it in a KMS."""
+    try:
+        kms_adapter = KMS_PROVIDERS_MAP[kms_scheme]
+    except KeyError as e:
+        logger.error(
+            f"Error: KMS provider not found: {kms_scheme}"
+        )
+        raise e
+
+    try:
+        kms = kms_adapter()
+        pubkey_name, privkey_name = f"{prefix}.pub", f"{prefix}.key"
+        response = kms.store(privkey_name)
+        response.raise_for_status()
+    except requests.HTTPError as http_error:
+        raise KMSProviderError from http_error
+
+    pubkey = kms.retrieve_public_key(privkey_name)
+
+    with open(os.path.join(path, pubkey_name), "w") as pubkey_file:
+        pubkey_file.write(pubkey)
+        logger.info(f"Public key written to {pubkey_name}")
+
+    return pubkey

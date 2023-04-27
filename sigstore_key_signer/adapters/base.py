@@ -29,20 +29,14 @@ class BaseAdapter(abc.ABC):
         """Initialize a KMS adapter."""
         raise NotImplementedError
 
-    @property
-    @abc.abstractmethod
-    def uri_scheme(self) -> str:
-        """The go-cloud-style URI scheme for the KMS provider."""
-        raise NotImplementedError
-
     @abc.abstractmethod
     def store(self, *args, **kwargs) -> Any:
         """Store a key."""
         raise NotImplementedError
 
     @abc.abstractmethod
-    def retrieve(self, *args, **kwargs) -> Any:
-        """Retrieve a key."""
+    def retrieve_public_key(self, *args, **kwargs) -> Any:
+        """Retrieve a public key."""
         raise NotImplementedError
 
     @abc.abstractmethod
