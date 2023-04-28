@@ -60,21 +60,19 @@ class Vault(BaseAdapter):
         """Initialize a `Vault` client and warn for missing environment variables."""
         missing_vars = set(VAULT_ENV).difference(os.environ.keys())
         if missing_vars:
-            logger.warn(
-                f"Vault environment variables missing: {missing_vars}\n"
-            )
+            logger.warn(f"Vault environment variables missing: {missing_vars}\n")
 
         self.client = hvac.Client(url=self.url)
 
     def store(self, key_name: str) -> Response:
         """Store a key on the server at the default path `/transit/keys/{key_name}`"""
-        return self.client.secrets.transit.create_key(key_name, key_type="ecdsa-p384")
+        return self.client.secrets.transit.create_key(key_name, key_type="ecdsa-p256")
 
-    def retrieve_public_key(self, key_name: str) -> dict:
+    def retrieve_public_key(self, key_name: str) -> bytes:
         """Retrieve the public key at the default path `/transit/keys/{key_name}`."""
         resp = self.client.secrets.transit.read_key(key_name)
         # Take the key at the first index
-        return resp["data"]["keys"]["1"]["public_key"]
+        return resp["data"]["keys"]["1"]["public_key"].encode()
 
     def delete(self, key_name: str) -> bool:
         """Delete a stored key at the default path `/transit/keys/{key_name}`."""
@@ -84,9 +82,9 @@ class Vault(BaseAdapter):
         self,
         key_name: str,
         hash_input: str,
-    ) -> bytes:
+    ) -> str:
         """Sign an artifact using the private key stored under `key_name`."""
-        # Assuming ecdsa-p256 key type
+        # Assuming ecdsa-p384 key type
         resp = self.client.secrets.transit.sign_data(
             key_name,
             hash_input,
