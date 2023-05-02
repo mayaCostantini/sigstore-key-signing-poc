@@ -60,6 +60,7 @@ from sigstore.verify.models import (
     VerificationResult,
     VerificationSuccess,
 )
+from sigstore_key_signer.rekor import KeyRekorClient
 from typing import cast, IO, Optional, Type, TypeVar
 from urllib.parse import urljoin
 

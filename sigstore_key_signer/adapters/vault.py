@@ -28,7 +28,10 @@ import re
 
 from requests import Response
 from sigstore_key_signer.adapters.base import BaseAdapter
-from typing import Any
+from typing import (
+    Any,
+    Optional,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -92,79 +95,79 @@ class Vault(BaseAdapter):
         )
         sig = resp["data"]["signature"]
 
-        return sig.split(":")[-1].encode()
+        return sig.split(":")[-1]
 
     @property
-    def url(self) -> str:
+    def url(self) -> Optional[str]:
         """URL to the Vault server."""
         return os.getenv("VAULT_ADDR")
 
     @property
-    def token(self) -> str:
+    def token(self) -> Optional[str]:
         """Authentication token for the Vault client."""
         return os.getenv("VAULT_TOKEN")
 
     @property
-    def ca_cert(self) -> str:
+    def ca_cert(self) -> Optional[str]:
         """Path to a CA certificate file on the local disk."""
         return os.getenv("VAULT_CACERT")
 
     @property
-    def ca_path(self) -> str:
+    def ca_path(self) -> Optional[str]:
         """Path to a directory of CA certificate files on the local disk"""
         return os.getenv("VAULT_CAPATH")
 
     @property
-    def client_cert(self) -> str:
+    def client_cert(self) -> Optional[str]:
         """Path to a client certificate on the local disk"""
         return os.getenv("VAULT_CLIENT_CERT")
 
     @property
-    def client_key(self) -> str:
+    def client_key(self) -> Optional[str]:
         """Path to an unencrypted private key on disk which corresponds to the matching client certificate."""
         return os.getenv("VAULT_CLIENT_KEY")
 
     @property
-    def client_timeout(self) -> int:
+    def client_timeout(self) -> Optional[str]:
         """Timeout variable."""
         return os.getenv("VAULT_CLIENT_TIMEOUT")
 
     @property
-    def format(self) -> str:
+    def format(self) -> Optional[str]:
         """Provide Vault output (read/status/write) in the specified format."""
         return os.getenv("VAULT_FORMAT")
 
     @property
-    def max_retries(self) -> str:
+    def max_retries(self) -> Optional[str]:
         """Maximum number of retries when certain error codes are encountered."""
         return os.getenv("VAULT_MAX_RETRIES")
 
     @property
-    def skip_verify(self) -> str:
+    def skip_verify(self) -> Optional[str]:
         """Do not verify Vault's presented certificate before communicating with it (not recommended)."""
         return os.getenv("VAULT_SKIP_VERIFY")
 
     @property
-    def tls_server_name(self) -> str:
+    def tls_server_name(self) -> Optional[str]:
         """Name to use as the SNI host when connecting via TLS."""
         return os.getenv("VAULT_TLS_SERVER_NAME")
 
     @property
-    def rate_limit(self) -> str:
+    def rate_limit(self) -> Optional[str]:
         """Limit the rate at which the vault command sends requests to Vault."""
         return os.getenv("VAULT_RATE_LIMIT")
 
     @property
-    def http_proxy(self) -> str:
+    def http_proxy(self) -> Optional[str]:
         """HTTP or HTTPS proxy location which should be used by all requests to access Vault."""
         return os.getenv("VAULT_HTTP_PROXY")
 
     @property
-    def proxy_addr(self) -> str:
+    def proxy_addr(self) -> Optional[str]:
         """HTTP or HTTPS proxy location which should be used by all requests to access Vault."""
         return os.getenv("VAULT_PROXY_ADDR")
 
     @property
-    def disable_redirects(self) -> str:
+    def disable_redirects(self) -> Optional[str]:
         """Prevents the Vault client from following redirects."""
         return os.getenv("VAULT_DISABLE_REDIRECTS")

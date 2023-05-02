@@ -109,7 +109,7 @@ class KeyRefSigner(BaseKeySigner):
     """Signer from a local or remote private key file."""
 
     def __init__(
-        self, key_path: str, rekor: RekorClient, encryption_password: bytes
+        self, key_path: str, rekor: RekorClient, encryption_password: Optional[bytes],
     ) -> None:
         """Initialize a KeyRefSigner instance."""
         super().__init__(rekor=rekor)
@@ -237,14 +237,12 @@ class RemoteKeySigner(KeyRefSigner):
             base64.b64encode(input_digest).decode(),
         )
 
-        b64_artifact_signature = B64Str(base64.b64encode(signature).decode())
-
         public_key_bytes = kms_client.retrieve_public_key(self.key_store_path)
         b64_public_key = B64Str(base64.b64encode(public_key_bytes).decode())
 
         # Create the transparency log entry
         entry = self._rekor.log.entries.post(
-            b64_artifact_signature=B64Str(b64_artifact_signature),
+            b64_artifact_signature=B64Str(signature),
             sha256_artifact_hash=input_digest.hex(),
             b64_cert=b64_public_key,
         )
@@ -255,7 +253,7 @@ class RemoteKeySigner(KeyRefSigner):
             input_digest=HexStr(input_digest.hex()),
             # Workaround to include the public key instead of the signing certificate in the SigningResult
             public_key=b64_public_key,
-            b64_signature=B64Str(b64_artifact_signature),
+            b64_signature=B64Str(signature),
             log_entry=entry,
         )
 
