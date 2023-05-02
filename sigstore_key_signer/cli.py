@@ -304,13 +304,13 @@ def _generate_key_pair(args: argparse.Namespace) -> None:
                 f"Refusing to overwrite output key files {args.output_key_prefix}.* without --overwrite"
             )
 
-            private_key, public_key = generate_key_pair(args.output_key_prefix)
-            store_local_key_pair(
-                private_key,
-                public_key,
-                args.output_key_prefix,
-                password,
-            )
+        private_key, public_key = generate_key_pair()
+        store_local_key_pair(
+            private_key,
+            public_key,
+            args.output_key_prefix,
+            password,
+        )
 
 
 def _parser() -> argparse.ArgumentParser:
