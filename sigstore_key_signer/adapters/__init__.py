@@ -16,12 +16,3 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 """Adapters for interacting with secret managers and KMS."""
-
-from .base import BaseAdapter
-from .vault import Vault, VAULT_ENV
-
-__all__ = [
-    "BaseAdapter",
-    "Vault",
-    "VAULT_ENV",
-]

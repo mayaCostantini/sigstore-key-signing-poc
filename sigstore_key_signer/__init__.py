@@ -20,4 +20,10 @@ __name__ = "sigstore-key-signer"
 __version__ = "0.0.1"
 __author__ = "Maya Costantini <mcostant@redhat.com>"
 
+
+from sigstore_key_signer.adapters.vault import Vault
+
+KMS_PROVIDERS_MAP = {
+    "hashivault": Vault,
+}
 DEFAULT_KEY_FILE_PREFIX = "sigstore"

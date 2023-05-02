@@ -26,12 +26,17 @@ import abc
 import base64
 import logging
 
+from asn1crypto.core import Sequence, Integer
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.utils import Prehashed
+from cryptography.hazmat.primitives.asymmetric.utils import (
+    Prehashed,
+    decode_dss_signature,
+)
 from pathlib import Path
 from pydantic import BaseModel
 from sigstore._internal.rekor import RekorClient
+from sigstore._internal.rekor.client import RekorClientError
 from sigstore._internal.tuf import TrustUpdater
 from sigstore._utils import (
     B64Str,
@@ -39,11 +44,18 @@ from sigstore._utils import (
     sha256_streaming,
 )
 from sigstore.transparency import LogEntry
-from sigstore_key_signer import DEFAULT_KEY_FILE_PREFIX
-from sigstore_key_signer.adapters import (
-    BaseAdapter,
+from sigstore_key_signer import (
+    DEFAULT_KEY_FILE_PREFIX,
+    KMS_PROVIDERS_MAP,
+)
+from sigstore_key_signer.adapters.base import BaseAdapter
+from sigstore_key_signer.adapters.vault import (
     Vault,
     VAULT_ENV,
+)
+from sigstore_key_signer.generate import (
+    generate_key_pair,
+    store_local_key_pair,
 )
 from typing import (
     IO,
@@ -88,7 +100,7 @@ class BaseKeySigner(abc.ABC):
         return cls(rekor=rekor, **kwargs)
 
     @abc.abstractmethod
-    def sign(self, input_: IO[bytes]) -> KeySigningResult:
+    def sign(self, input_: IO[bytes] | str, *args, **kwargs) -> KeySigningResult:
         """Base method for implementing key-signing."""
         raise NotImplementedError
 
@@ -97,73 +109,84 @@ class KeyRefSigner(BaseKeySigner):
     """Signer from a local or remote private key file."""
 
     def __init__(
-        self,
-        rekor: RekorClient,
-        key_path: Path,
-        encryption_password: Optional[bytes],
+        self, key_path: str, rekor: RekorClient, encryption_password: Optional[bytes],
     ) -> None:
         """Initialize a KeyRefSigner instance."""
         super().__init__(rekor=rekor)
         self.key_path = key_path
         self.encryption_password = encryption_password
 
-    def _get_scheme(self) -> str:
-        """Get the `key_path` URI or local path scheme."""
-        return urlparse(self.key_path.as_posix()).scheme
+    @property
+    def is_local(self) -> bool:
+        """Determine if the key path provided is local or remote."""
+        parsed_path = urlparse(self.key_path)
+        if parsed_path.scheme:
+            return False
+        return True
 
-    def _kms_adapter_from_scheme(self, scheme: str) -> BaseAdapter:
-        """Retrieve a KMS adapter from provided scheme."""
-        if scheme == "hashivault":
-            # For Vault, the server address is set via the environment variable `VAULT_ADDR`
-            return Vault()
+    @property
+    def instance(self) -> "KeyRefSigner":
+        """Return a KeyRefSigner subclass for local or remote signing."""
+        if self.is_local:
+            return LocalKeySigner(
+                key_path=self.key_path,
+                rekor=self._rekor,
+                encryption_password=self.encryption_password,
+            )
 
-        raise ValueError(f"Unknown KMS provider scheme: {scheme}")
+        return RemoteKeySigner(
+            key_path=self.key_path,
+            rekor=self._rekor,
+        )
 
-    def sign(self, input_: IO[bytes]) -> KeySigningResult:
-        """Sign using a private key."""
-        logger.debug(f"Retrieving a signing key from {self.key_path}...")
-        scheme = self._get_scheme()
+    def sign(self, input_: IO[bytes] | str, *args, **kwargs) -> KeySigningResult:
+        """Delegate signing to the adapted KeyRefSigner child instance."""
+        return self.instance.sign(input_, *args, **kwargs)
+
+
+class LocalKeySigner(KeyRefSigner):
+    """Signer from an existing local key pair."""
+
+    def __init__(
+        self,
+        key_path: str,
+        rekor: RekorClient,
+        encryption_password: Optional[bytes],
+    ) -> None:
+        """Initialize a LocalKeySigner instance."""
+        super().__init__(
+            key_path=key_path, rekor=rekor, encryption_password=encryption_password
+        )
+        self.key_path = key_path
+        self.encryption_password = encryption_password
+
+    def sign(self, input_: IO[bytes], *args, **kwargs) -> KeySigningResult:
+        """Sign an artifact bytes with a local key pair."""
         input_digest = sha256_streaming(input_)
+        with open(self.key_path, "rb") as file:
+            signing_key = file.read()
 
-        # Key file is in a local path
-        if scheme == "":
-            with open(self.key_path, "rb") as file:
-                signing_key = file.read()
+            decrypted_key: ec.EllipticCurvePrivateKey = serialization.load_pem_private_key(  # type: ignore
+                data=signing_key,
+                password=self.encryption_password,
+            )
+            artifact_signature = decrypted_key.sign(
+                input_digest,
+                ec.ECDSA(Prehashed(hashes.SHA256())),
+            )
+            public_key = decrypted_key.public_key().public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
 
-                decrypted_key: ec.EllipticCurvePrivateKey = serialization.load_pem_private_key(  # type: ignore
-                    data=signing_key,
-                    password=self.encryption_password,
-                )
-                artifact_signature = decrypted_key.sign(
-                    input_digest,
-                    ec.ECDSA(Prehashed(hashes.SHA256())),
-                )
-                public_key = decrypted_key.public_key().public_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
-                )
-
-                b64_artifact_signature = B64Str(
-                    base64.b64encode(artifact_signature).decode()
-                )
-                b64_public_key = B64Str(base64.b64encode(public_key).decode())
-
-        else:
-            kms_client = self._kms_adapter_from_scheme(self._get_scheme())
-            privkey_name = self.key_path.as_posix().split("://")[-1]
-            if isinstance(kms_client, Vault):
-                artifact_signature = kms_client.sign(
-                    privkey_name,
-                    input_digest,
-                )
-            # Retrieve the corresponding public key
-            public_key = kms_client.retrieve(privkey_name)
-            b64_artifact_signature = B64Str(artifact_signature)
-            b64_public_key = B64Str(public_key)
+            b64_artifact_signature = B64Str(
+                base64.b64encode(artifact_signature).decode()
+            )
+            b64_public_key = B64Str(base64.b64encode(public_key).decode())
 
         # Create the transparency log entry
         entry = self._rekor.log.entries.post(
-            b64_artifact_signature=B64Str(b64_artifact_signature),
+            b64_artifact_signature=b64_artifact_signature,
             sha256_artifact_hash=input_digest.hex(),
             b64_cert=b64_public_key,
         )
@@ -174,7 +197,63 @@ class KeyRefSigner(BaseKeySigner):
             input_digest=HexStr(input_digest.hex()),
             # Workaround to include the public key instead of the signing certificate in the SigningResult
             public_key=b64_public_key,
-            b64_signature=B64Str(b64_artifact_signature),
+            b64_signature=b64_artifact_signature,
+            log_entry=entry,
+        )
+
+
+class RemoteKeySigner(KeyRefSigner):
+    """Signer from a remote KMS."""
+
+    def __init__(self, key_path: str, rekor: RekorClient) -> None:
+        """Initialize a RemoteKeySigner instance."""
+        super().__init__(key_path=key_path, rekor=rekor, encryption_password=None)
+        self.key_path = key_path
+
+    @property
+    def key_store_path(self) -> str:
+        """Retrieve the key storage path from the KMS URI."""
+        return urlparse(self.key_path).netloc
+
+    def adapter_from_scheme(self) -> BaseAdapter:
+        """Get a KMS adapter from the specified scheme."""
+        scheme = urlparse(self.key_path).scheme
+        try:
+            adapter = KMS_PROVIDERS_MAP[scheme]
+        except KeyError as keyerror:
+            logger.error(f"No KMS found for URI scheme {scheme}")
+            raise keyerror
+
+        return adapter()
+
+    def sign(self, input_: IO[bytes], *args, **kwargs) -> KeySigningResult:
+        """Sign an artifact with a key stored in a KMS."""
+        logger.debug(f"Retrieving a signing key from {self.key_path}")
+        kms_client = self.adapter_from_scheme()
+        input_digest = sha256_streaming(input_)
+
+        signature = kms_client.sign(
+            self.key_store_path,
+            base64.b64encode(input_digest).decode(),
+        )
+
+        public_key_bytes = kms_client.retrieve_public_key(self.key_store_path)
+        b64_public_key = B64Str(base64.b64encode(public_key_bytes).decode())
+
+        # Create the transparency log entry
+        entry = self._rekor.log.entries.post(
+            b64_artifact_signature=B64Str(signature),
+            sha256_artifact_hash=input_digest.hex(),
+            b64_cert=b64_public_key,
+        )
+
+        logger.debug(f"Transparency log entry created at index: {entry.log_index}")
+
+        return KeySigningResult(
+            input_digest=HexStr(input_digest.hex()),
+            # Workaround to include the public key instead of the signing certificate in the SigningResult
+            public_key=b64_public_key,
+            b64_signature=B64Str(signature),
             log_entry=entry,
         )
 
@@ -193,45 +272,26 @@ class NewKeySigner(BaseKeySigner):
         self.key_file_prefix = key_file_prefix or DEFAULT_KEY_FILE_PREFIX
         self.encryption_password = encryption_password
 
-    def sign(self, input_: IO[bytes]) -> KeySigningResult:
+    def sign(
+        self, input_: IO[bytes], encryption_password: Optional[bytes]
+    ) -> KeySigningResult:
         """Generate a new key pair and sign artifact."""
         input_digest = sha256_streaming(input_)
-        logger.debug("Generating a key pair...")
-        private_key = ec.generate_private_key(ec.SECP384R1())
+        private_key, public_key = generate_key_pair()
 
         artifact_signature = private_key.sign(
             input_digest, ec.ECDSA(Prehashed(hashes.SHA256()))
         )
 
-        encryption_algorithm: serialization.KeySerializationEncryption
-
-        if self.encryption_password:
-            encryption_algorithm = serialization.BestAvailableEncryption(
-                self.encryption_password
-            )
-
-        else:
-            encryption_algorithm = serialization.NoEncryption()
-
-        with open(f"{self.key_file_prefix}.key", "wb") as privkey_file:
-            privkey_file.write(
-                private_key.private_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PrivateFormat.PKCS8,
-                    encryption_algorithm=encryption_algorithm,
-                )
-            )
-
-        public_key = private_key.public_key().public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        privkey_bytes, pubkey_bytes = store_local_key_pair(
+            private_key,
+            public_key,
+            self.key_file_prefix,
+            encryption_password,
         )
 
-        with open(f"{self.key_file_prefix}.pub", "wb") as pubkey_file:
-            pubkey_file.write(public_key)
-
         b64_artifact_signature = B64Str(base64.b64encode(artifact_signature).decode())
-        b64_public_key = B64Str(base64.b64encode(public_key).decode())
+        b64_public_key = B64Str(base64.b64encode(pubkey_bytes).decode())
 
         # Create the transparency log entry
         entry = self._rekor.log.entries.post(

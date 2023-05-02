@@ -33,6 +33,7 @@ import sys
 from pathlib import Path
 from sigstore_key_signer import (
     DEFAULT_KEY_FILE_PREFIX,
+    KMS_PROVIDERS_MAP,
     __version__,
 )
 from sigstore_key_signer.exceptions import (
@@ -40,8 +41,9 @@ from sigstore_key_signer.exceptions import (
     VerificationError,
 )
 from sigstore_key_signer.generate import (
-    generate_local_key_pair,
+    generate_key_pair,
     generate_to_kms,
+    store_local_key_pair,
 )
 from sigstore_key_signer.keysigner import (
     BaseKeySigner,
@@ -50,10 +52,10 @@ from sigstore_key_signer.keysigner import (
 )
 from sigstore_key_signer.keyverifier import (
     BaseKeyVerifier,
-    KeyRekorClient,
     KeyRefVerifier,
     KeyVerificationMaterials,
 )
+from sigstore_key_signer.rekor import KeyRekorClient
 from sigstore._internal.ctfe import CTKeyring
 from sigstore._internal.keyring import Keyring
 from sigstore._internal.rekor.client import (
@@ -70,7 +72,7 @@ from urllib.parse import (
 )
 
 
-logging.basicConfig()
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 DEFAULT_MIN_PASSWORD_LENGTH = 1
@@ -107,23 +109,20 @@ def _rekor_client_from_opts(args: argparse.Namespace) -> KeyRekorClient:
 def _signer_from_opts(args: argparse.Namespace) -> BaseKeySigner:
     """Choose a Key Signer from command line options."""
     password = _get_privkey_password(args)
+    rekor_client = _rekor_client_from_opts(args)
 
     if args.key:
-        key_ref_signer = KeyRefSigner.production(
-            key_path=args.key, encryption_password=password
+        return KeyRefSigner(
+            key_path=args.key,
+            rekor=rekor_client,
+            encryption_password=password,
         )
-        key_ref_signer.key_path = args.key
-        return key_ref_signer
-    if args.rekor_url == DEFAULT_REKOR_URL:
-        new_key_signer = NewKeySigner(
-            _rekor_client_from_opts(args), args.key, encryption_password=password
-        )
-    else:
-        new_key_signer = NewKeySigner.production()
-    new_key_signer.key_file_prefix = args.key_file_prefix
-    new_key_signer.encryption_password = password
 
-    return new_key_signer
+    return NewKeySigner(
+        key_file_prefix=args.key_file_prefix,
+        rekor=rekor_client,
+        encryption_password=password,
+    )
 
 
 def _verifier_from_opts(args: argparse.Namespace) -> BaseKeyVerifier:
@@ -161,6 +160,7 @@ def _sign_key(args: argparse.Namespace) -> None:
         with file.open(mode="rb", buffering=0) as io:
             result = signer.sign(
                 input_=io,
+                encryption_password=_get_privkey_password(args),
             )
 
         print(f"Transparency log entry created at index: {result.log_entry.log_index}")
@@ -291,7 +291,7 @@ def _generate_key_pair(args: argparse.Namespace) -> None:
     """Generate a new key pair."""
     if args.kms:
         scheme, full_path = _parse_kms_uri(args.kms)
-        generate_to_kms(args.output_key_prefix, args.path, scheme)
+        generate_to_kms(args.output_key_prefix, scheme)
 
     else:
         privpath = Path(args.path) / f"{args.output_key_prefix}.pub"
@@ -304,11 +304,13 @@ def _generate_key_pair(args: argparse.Namespace) -> None:
                 f"Refusing to overwrite output key files {args.output_key_prefix}.* without --overwrite"
             )
 
-            generate_local_key_pair(
-                prefix=args.output_key_prefix,
-                path=args.path,
-                password=password,
-            )
+        private_key, public_key = generate_key_pair()
+        store_local_key_pair(
+            private_key,
+            public_key,
+            args.output_key_prefix,
+            password,
+        )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -356,7 +358,7 @@ def _parser() -> argparse.ArgumentParser:
         "-k",
         "--key",
         metavar="PATH",
-        type=Path,
+        type=str,
         help="The path to a local or remote private key file",
     )
     sign.add_argument(
