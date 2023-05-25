@@ -13,12 +13,12 @@ The aim of this tool is to provide a command-line interface and a library based 
 ## Usage
 
 ```
-usage: sigstore-key-signer [-h] [-V] [-v] [--rekor-url URL] [--rekor-root-pubkey FILE] {sign-key,verify-key,generate-key-pair} ...
+usage: sigstore-key-signer [-h] [-V] [-v] [--rekor-url URL] [--rekor-root-pubkey FILE] {sign,verify,generate-key-pair} ...
 
 a tool for signing and verifying Python package distributions
 
 positional arguments:
-  {sign-key,verify-key,generate-key-pair}
+  {sign,verify,generate-key-pair}
 
 options:
   -h, --help            show this help message and exit
@@ -36,7 +36,7 @@ Supported actions include:
 - Generating a new pair of keys locally and using them to sign artifacts:
 
 ```
-sigstore-key-signer sign-key --password my-private-key-password file.txt
+sigstore-key-signer sign --password my-private-key-password file.txt
 
 Transparency log entry created at index: 16110633
 Signature written to file.txt.sig
@@ -45,7 +45,7 @@ Signature written to file.txt.sig
 - Signing using an existing private key:
 
 ```
-sigstore-key-signer sign-key --key sigstore.key --password my-private-key-password file.txt
+sigstore-key-signer sign --key sigstore.key --password my-private-key-password file.txt
 
 Transparency log entry created at index: 16111291
 Signature written to file.txt.sig
@@ -54,7 +54,7 @@ Signature written to file.txt.sig
 - Verifying a signature using a local public key file:
 
 ```
-sigstore-key-signer verify-key --public-key sigstore.pub file.txt
+sigstore-key-signer verify --public-key sigstore.pub file.txt
 
 Verified signature for file.txt: OK.
 ```
