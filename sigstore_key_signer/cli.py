@@ -133,7 +133,7 @@ def _verifier_from_opts(args: argparse.Namespace) -> BaseKeyVerifier:
         return KeyRefVerifier(rekor=_rekor_client_from_opts(args))
 
 
-def _sign_key(args: argparse.Namespace) -> None:
+def _sign(args: argparse.Namespace) -> None:
     """Sign with a self-managed key pair."""
     output_map = {}
     for file in args.files:
@@ -243,7 +243,7 @@ def _collect_verification_materials(
     return (verifier, all_materials)
 
 
-def _verify_key(args: argparse.Namespace) -> None:
+def _verify(args: argparse.Namespace) -> None:
     """Verify a signature produced by a self-managed key pair."""
 
     verifier, file_with_materials = _collect_verification_materials(args)
@@ -352,7 +352,7 @@ def _parser() -> argparse.ArgumentParser:
 
     subcommands = parser.add_subparsers(required=True, dest="subcommand")
     sign = subcommands.add_parser(
-        "sign-key", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        "sign", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     sign.add_argument(
         "-k",
@@ -403,7 +403,7 @@ def _parser() -> argparse.ArgumentParser:
     )
 
     verify = subcommands.add_parser(
-        "verify-key", formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        "verify", formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     verify.add_argument(
         "-k",
@@ -480,11 +480,11 @@ def main() -> None:
     args._parser = parser
 
     try:
-        if args.subcommand == "sign-key":
-            _sign_key(args)
+        if args.subcommand == "sign":
+            _sign(args)
 
-        elif args.subcommand == "verify-key":
-            _verify_key(args)
+        elif args.subcommand == "verify":
+            _verify(args)
 
         elif args.subcommand == "generate-key-pair":
             _generate_key_pair(args)
