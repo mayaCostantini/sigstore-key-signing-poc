@@ -321,8 +321,23 @@ def _parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="sigstore-key-signer",
-        description="a tool for signing and verifying Python package distributions",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="A tool for signing and verifying files artifatcs with Sigstore using a key pair",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+        Example usage:
+
+        # Sign by generating a new local key pair
+        sigstore-key-signer sign file.txt
+
+        # Sign with an existing local key pair
+        sigstore-key-signer sign --key sigstore.key file.txt
+
+        # Sign using a key stored in Hashicorp Vault
+        sigstore-key-signer sign --key hashivault://signing.key file.txt
+
+        # Generate a new password-protected local key pair
+        sigstore-key-signer generate-key-pair --password-stdin
+        """
     )
     parser.add_argument(
         "-V", "--version", action="version", version=f"%(prog)s {__version__}"
