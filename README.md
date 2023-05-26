@@ -15,7 +15,7 @@ The aim of this tool is to provide a command-line interface and a library based 
 ```
 usage: sigstore-key-signer [-h] [-V] [-v] [--rekor-url URL] [--rekor-root-pubkey FILE] {sign,verify,generate-key-pair} ...
 
-a tool for signing and verifying Python package distributions
+A tool for signing and verifying files artifatcs with Sigstore using a key pair
 
 positional arguments:
   {sign,verify,generate-key-pair}
@@ -29,6 +29,20 @@ Sigstore instance options:
   --rekor-url URL       The Rekor instance to use (default: https://rekor.sigstore.dev)
   --rekor-root-pubkey FILE
                         A PEM-encoded root public key for Rekor itself (default: None)
+
+        Example usage:
+
+        # Sign by generating a new local key pair
+        sigstore-key-signer sign artifact.txt
+
+        # Sign with an existing local key pair
+        sigstore-key-signer sign --key sigstore.key artifact.txt
+
+        # Sign using a key stored in Hashicorp Vault
+        sigstore-key-signer sign --key hashivault://sigstore.key artifact.txt
+
+        # Generate a new password-protected local key pair
+        sigstore-key-signer generate-key-pair --password-stdin
 ```
 
 Supported actions include:
@@ -51,6 +65,23 @@ Transparency log entry created at index: 16111291
 Signature written to file.txt.sig
 ```
 
+- Generating a new private key in Hashicorp Vault:
+
+```
+sigstore-key-signer generate-key-pair --kms hashivault://sigstore.key
+
+Public key written to sigstore.pub
+```
+
+- Signing an artifact using an existing key stored in Hashicorp Vault:
+
+```
+sigstore-key-signer sign --key hashivault://sigstore.key file.txt
+
+Transparency log entry created at index: 21762071
+Signature written to file.txt.sig
+```
+
 - Verifying a signature using a local public key file:
 
 ```
@@ -58,6 +89,7 @@ sigstore-key-signer verify --public-key sigstore.pub file.txt
 
 Verified signature for file.txt: OK.
 ```
+
 
 ## Future support
 
