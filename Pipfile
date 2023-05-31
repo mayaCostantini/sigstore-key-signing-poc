@@ -8,6 +8,8 @@ sigstore = "*"
 pydantic = "*"
 cryptography = "*"
 requests = "*"
+hvac = "*"
+asn1crypto = "*"
 
 [dev-packages]
 
