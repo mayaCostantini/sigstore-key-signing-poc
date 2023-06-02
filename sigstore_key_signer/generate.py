@@ -94,7 +94,12 @@ def generate_to_kms(
 
     try:
         kms = kms_adapter()
-        pubkey_name, privkey_name = f"{prefix}.pub", f"{prefix}.key"
+        if not prefix.endswith(".key"):
+            pubkey_name = f"{prefix}.pub"
+            privkey_name = f"{prefix}.key"
+        else:
+            pubkey_name = f"{prefix[:-4]}.pub"
+            privkey_name = prefix
         logger.debug(
             f"Generating new signing key {privkey_name} in KMS {kms.__class__.__name__}"
         )
