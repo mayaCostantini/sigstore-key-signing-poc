@@ -90,6 +90,16 @@ sigstore-key-signer verify --public-key sigstore.pub file.txt
 Verified signature for file.txt: OK.
 ```
 
+## Development
+
+To start the development environment for `sigstore-key-signer` with a Vault server in development mode, run:
+
+```
+docker-compose up
+```
+
+This command will start a Vault container, automatically enable the Transit engine used to store private keys and start a second container with the built from source version of `sigstore-key-signer` and Vault credentials available in the environment. To rebuild the `sigstore-key-signer` container, run `docker-compose up --build`.
+
 
 ## Future support
 
