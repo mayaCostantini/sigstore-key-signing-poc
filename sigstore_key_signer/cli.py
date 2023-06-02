@@ -291,7 +291,7 @@ def _generate_key_pair(args: argparse.Namespace) -> None:
     """Generate a new key pair."""
     if args.kms:
         scheme, full_path = _parse_kms_uri(args.kms)
-        generate_to_kms(args.output_key_prefix, scheme)
+        generate_to_kms(full_path, scheme)
 
     else:
         privpath = Path(args.path) / f"{args.output_key_prefix}.pub"
