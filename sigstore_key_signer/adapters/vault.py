@@ -66,6 +66,7 @@ class Vault(BaseAdapter):
             logger.warn(f"Vault environment variables missing: {missing_vars}\n")
 
         self.client = hvac.Client(url=self.url)
+        self.client.token = self.token
 
     def store(self, key_name: str) -> Response:
         """Store a key on the server at the default path `/transit/keys/{key_name}`"""
